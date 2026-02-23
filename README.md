@@ -15,9 +15,14 @@ This microservice is **headless** (no UI) and is intended to be called programma
 ## How to run the microservice (local)
 First run this: 
 ```bash
+python -m pip install -r requirements.txt
+```
+
+Second run this: 
+```bash
 python app.py
 ```
-Second, run this:
+Third, run this:
 ```bash
 python test_client.py
 ```
@@ -51,7 +56,7 @@ Structured input data required to generate the report.
     * timezone (string)
 
 ### Example request (Python)
-```bash
+```python
 import requests
 
 payload = {
@@ -84,7 +89,7 @@ On success, the microservice returns:
 
 #### Example success response
 
-```bash
+```JSON
 {
   "title": "Upcoming Deadlines Summary",
   "highlights": [
@@ -112,7 +117,7 @@ If the request is invalid (unsupported report type, missing fields, etc.), the m
 * `details` (object, optional)
 
 #### Example error response
-```bash
+```JSON
 {
   "errorCode": "INVALID_REQUEST",
   "message": "Unsupported reportType: 'gradesSnapshot'. Supported types: deadlines, portfolio, iotStatus, gameRunSummary.",
@@ -124,7 +129,7 @@ If the request is invalid (unsupported report type, missing fields, etc.), the m
 
 ### Client-side parsing example (Python)
 
-```bash
+```python
 import requests
 
 resp = requests.post("http://127.0.0.1:5000/report", json={"reportType":"deadlines","data":{}}, timeout=2)
@@ -143,4 +148,4 @@ else:
 This diagram shows how a Main Program requests a report and receives the report back.
 It also shows the validation path when an invalid request is sent.
 
-![alt text](image.png)
+![UML Sequence Diagram](docs/uml-sequence.png)
