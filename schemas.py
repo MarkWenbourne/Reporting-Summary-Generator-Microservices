@@ -7,10 +7,34 @@ SUPPORTED_REPORT_TYPES = {"deadlines", "portfolio", "iotStatus", "gameRunSummary
 
 def validate_request(payload: Any) -> Tuple[bool, Dict[str, Any]]:
     """
-    Returns (ok, result)
-    - if ok=True: result contains normalized payload
-    - if ok=False: result contains error response body
+    Returns (is_valid, result)
+    - if is_valid=True: result contains normalized payload
+    - if is_valid=False: result contains error response body
     """
+
+    ok, result = _validate_payload_structure(payload)
+    if not ok:
+        return False, result
+
+    report_type, data, options = result
+
+    ok, err = _validate_report_type(report_type)
+    if not ok:
+        return False, err
+
+    ok, err = _validate_data_and_options(data, options)
+    if not ok:
+        return False, err
+
+    ok, err = _validate_report_specific(report_type, data)
+    if not ok:
+        return False, err
+
+    normalized = _normalize_request(report_type, data, options)
+    return True, normalized
+
+
+def _validate_payload_structure(payload: Any) -> Tuple[bool, Any]:
     if not isinstance(payload, dict):
         return False, error(
             message="Request body must be a JSON object.",
@@ -21,6 +45,10 @@ def validate_request(payload: Any) -> Tuple[bool, Dict[str, Any]]:
     data = payload.get("data")
     options = payload.get("options", {})
 
+    return True, (report_type, data, options)
+
+
+def _validate_report_type(report_type: Any) -> Tuple[bool, Dict[str, Any]]:
     if not isinstance(report_type, str) or not report_type.strip():
         return False, error(
             message="Missing or invalid 'reportType' (must be a non-empty string).",
@@ -33,6 +61,10 @@ def validate_request(payload: Any) -> Tuple[bool, Dict[str, Any]]:
             details={"reportType": report_type},
         )
 
+    return True, {}
+
+
+def _validate_data_and_options(data: Any, options: Any) -> Tuple[bool, Dict[str, Any]]:
     if not isinstance(data, dict):
         return False, error(
             message="Missing or invalid 'data' (must be a JSON object).",
@@ -45,10 +77,13 @@ def validate_request(payload: Any) -> Tuple[bool, Dict[str, Any]]:
             details={"field": "options"},
         )
 
-    # Report-type specific checks (lightweight, but useful)
+    return True, {}
+
+
+def _validate_report_specific(report_type: str, data: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
     missing: List[str] = []
+
     if report_type == "deadlines":
-        # expects: assignments list
         if "assignments" not in data:
             missing.append("data.assignments")
         elif not isinstance(data["assignments"], list):
@@ -63,8 +98,15 @@ def validate_request(payload: Any) -> Tuple[bool, Dict[str, Any]]:
             details={"missing": missing, "reportType": report_type},
         )
 
-    normalized = {"reportType": report_type, "data": data, "options": options}
-    return True, normalized
+    return True, {}
+
+
+def _normalize_request(report_type: str, data: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "reportType": report_type,
+        "data": data,
+        "options": options,
+    }
 
 
 def error(message: str, details: Dict[str, Any] | None = None) -> Dict[str, Any]:
