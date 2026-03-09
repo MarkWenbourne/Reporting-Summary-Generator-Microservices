@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 
 def generate_report(report_type: str, data: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
@@ -30,50 +30,82 @@ def _deadlines_report(data: Dict[str, Any], options: Dict[str, Any]) -> Dict[str
     max_items = int(options.get("maxItems", 10))
     include_details = bool(options.get("includeDetails", False))
 
-    # Normalize + sort (deterministic)
-    norm: List[Dict[str, Any]] = []
-    for a in assignments:
-        if not isinstance(a, dict):
-            continue
-        course = str(a.get("course", "")).strip()
-        title = str(a.get("title", "")).strip()
-        due = str(a.get("dueDate", "")).strip()  # expected YYYY-MM-DD
-        status = str(a.get("status", "")).strip() or "Not Started"
-        norm.append({"course": course, "title": title, "dueDate": due, "status": status})
-
-    # Filter out completed for "upcoming"
-    upcoming = [a for a in norm if a["status"].lower() != "completed"]
-    upcoming.sort(key=lambda x: (x["dueDate"], x["course"], x["title"]))
-
+    normalized = _normalize_assignments(assignments)
+    upcoming = _get_upcoming_assignments(normalized)
     shown = upcoming[:max_items]
 
-    items: List[str] = []
-    for a in shown:
-        if include_details:
-            items.append(f"{a['course']} — {a['title']} — Due {a['dueDate']} — Status: {a['status']}")
-        else:
-            items.append(f"{a['course']} — {a['title']} — Due {a['dueDate']}")
+    items = _build_deadline_items(shown, include_details)
+    highlights = _build_deadline_highlights(shown, upcoming)
 
-    # Highlights (deterministic, max 120 chars, at least 3 when possible)
-    highlights: List[str] = []
-    if shown:
-        highlights.append(f"Next due: {shown[0]['course']} {shown[0]['title']} ({shown[0]['dueDate']})")
-    highlights.append(f"{len(upcoming)} upcoming assignment(s) found")
-    in_progress = sum(1 for a in upcoming if a["status"].lower() == "in progress")
-    highlights.append(f"{in_progress} assignment(s) currently In Progress")
-
-    # Ensure highlight length constraints (truncate safely)
-    highlights = [_truncate(h, 120) for h in highlights]
-
-    report = {
+    return {
         "title": "Upcoming Deadlines Summary",
         "highlights": highlights,
         "sections": [
-            {"header": "Upcoming Assignments", "items": items if items else ["(No upcoming assignments)"]}
+            {
+                "header": "Upcoming Assignments",
+                "items": items if items else ["(No upcoming assignments)"],
+            }
         ],
-        "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generatedAt": _utc_now_str(),
     }
-    return report
+
+
+def _normalize_assignments(assignments: List[Any]) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+
+    for assignment in assignments:
+        if not isinstance(assignment, dict):
+            continue
+
+        course = str(assignment.get("course", "")).strip()
+        title = str(assignment.get("title", "")).strip()
+        due_date = str(assignment.get("dueDate", "")).strip()  # expected YYYY-MM-DD
+        status = str(assignment.get("status", "")).strip() or "Not Started"
+
+        normalized.append(
+            {
+                "course": course,
+                "title": title,
+                "dueDate": due_date,
+                "status": status,
+            }
+        )
+
+    return normalized
+
+
+def _get_upcoming_assignments(assignments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    upcoming = [assignment for assignment in assignments if assignment["status"].lower() != "completed"]
+    upcoming.sort(key=lambda item: (item["dueDate"], item["course"], item["title"]))
+    return upcoming
+
+
+def _build_deadline_items(assignments: List[Dict[str, Any]], include_details: bool) -> List[str]:
+    items: List[str] = []
+
+    for assignment in assignments:
+        if include_details:
+            items.append(
+                f"{assignment['course']} — {assignment['title']} — Due {assignment['dueDate']} — Status: {assignment['status']}"
+            )
+        else:
+            items.append(f"{assignment['course']} — {assignment['title']} — Due {assignment['dueDate']}")
+
+    return items
+
+
+def _build_deadline_highlights(shown: List[Dict[str, Any]], upcoming: List[Dict[str, Any]]) -> List[str]:
+    highlights: List[str] = []
+
+    if shown:
+        highlights.append(f"Next due: {shown[0]['course']} {shown[0]['title']} ({shown[0]['dueDate']})")
+
+    highlights.append(f"{len(upcoming)} upcoming assignment(s) found")
+
+    in_progress = sum(1 for assignment in upcoming if assignment["status"].lower() == "in progress")
+    highlights.append(f"{in_progress} assignment(s) currently In Progress")
+
+    return [_truncate(highlight, 120) for highlight in highlights]
 
 
 def _generic_report(title: str, highlights: List[str], items: List[str]) -> Dict[str, Any]:
@@ -81,8 +113,12 @@ def _generic_report(title: str, highlights: List[str], items: List[str]) -> Dict
         "title": title,
         "highlights": [_truncate(h, 120) for h in highlights],
         "sections": [{"header": "Summary", "items": items}],
-        "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generatedAt": _utc_now_str(),
     }
+
+
+def _utc_now_str() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _truncate(s: str, max_len: int) -> str:
