@@ -16,8 +16,11 @@ def health():
 @app.post("/report")
 def report():
     payload = request.get_json(silent=True)
-    ok, result = validate_request(payload)
-    if not ok:
+
+    # Improved variable naming for readability
+    is_valid, result = validate_request(payload)
+
+    if not is_valid:
         return jsonify(result), 400
 
     report_type = result["reportType"]
